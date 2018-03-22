@@ -91,7 +91,7 @@ namespace RealTimePPDisplayer
             RegisterDisplayer("wpf", (id) => new WpfDisplayer(id));
             RegisterDisplayer("mmf", (id) => new MmfDisplayer(id));
             RegisterDisplayer("text", (id) => new TextDisplayer(string.Format(Setting.TextOutputPath, id == null ? "" : id.Value.ToString())));
-            RegisterDisplayer("socket", (id) => new SocketDisplayer("128.146.200.147", 8080));
+            RegisterDisplayer("socket", (id) => new SocketDisplayer("128.146.200.147", 7272));
 
             Sync.Tools.IO.CurrentIO.WriteColor(PLUGIN_NAME + " By " + PLUGIN_AUTHOR, ConsoleColor.DarkCyan);
         }
