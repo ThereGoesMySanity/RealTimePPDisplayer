@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>RealTimePPDisplayer</RootNamespace>
     <AssemblyName>RealTimePPDisplayer</AssemblyName>
-    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
     <NuGetPackageImportStamp>
@@ -25,6 +25,7 @@
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>x86</PlatformTarget>
     <LangVersion>7</LangVersion>
+    <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -54,8 +55,8 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="OsuRTDataProviderRelease">
-      <HintPath>..\..\..\pp counter\Sync\Plugins\OsuRTDataProviderRelease.dll</HintPath>
+    <Reference Include="Newtonsoft.Json, Version=7.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\..\osuSync\packages\Newtonsoft.Json.7.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
@@ -74,43 +75,107 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Attribute\ApiKeyAttribute.cs" />
+    <Compile Include="Attribute\CustomColorAttribute.cs" />
+    <Compile Include="Attribute\FormatterListAttribute.cs" />
     <Compile Include="Beatmap\BeatmapObject.cs" />
     <Compile Include="Beatmap\BeatmapReader.cs" />
+    <Compile Include="Calculator\CatchTheBeatPerformanceCalculator.cs" />
     <Compile Include="Calculator\ManiaPerformanceCalculator.cs" />
     <Compile Include="Calculator\OppaiPerformanceCalculator.cs" />
-    <Compile Include="Calculator\OsuPerformanceCalculator.cs" />
+    <Compile Include="Calculator\StdPerformanceCalculator.cs" />
     <Compile Include="Calculator\PerformanceCalculatorBase.cs" />
     <Compile Include="Calculator\TaikoPerformanceCalculator.cs" />
+    <Compile Include="Constants.cs" />
+    <Compile Include="Formatter\FormatterBase.cs" />
+    <Compile Include="Formatter\IFormatterClearable.cs" />
+    <Compile Include="Formatter\RtppFormatWithBp.cs" />
+    <Compile Include="Gui\ValueConverter\VisiableValueConvert.cs" />
+    <Compile Include="Gui\DisplayListAttributeCreator.cs" />
+    <Compile Include="Gui\ApiKeyAttributeCreator.cs" />
+    <Compile Include="Gui\MultiOutputEditor.xaml.cs">
+      <DependentUpon>MultiOutputEditor.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MultiOutput\MultiOutputDisplayer.cs" />
+    <Compile Include="MultiOutput\MultiOutputItem.cs" />
+    <Compile Include="OsuApi.cs" />
+    <Compile Include="UpdateChecker.cs" />
     <Compile Include="DefaultLanguage.cs" />
     <Compile Include="Displayer\DisplayerBase.cs" />
-    <Compile Include="Displayer\Expression.cs" />
     <Compile Include="Displayer\MmfDisplayer.cs" />
     <Compile Include="Displayer\SocketDisplayer.cs" />
     <Compile Include="Displayer\TextDisplayer.cs" />
     <Compile Include="Displayer\WpfDisplayer.cs" />
-    <Compile Include="StringFormatter.cs" />
-    <Compile Include="SmoothMath.cs" />
-    <Compile Include="PPControl.cs" />
-    <Compile Include="PerformancePoint\Oppai.cs" />
-    <Compile Include="RealTimePPDisplayer.cs" />
+    <Compile Include="Attribute\DisplayListAttribute.cs" />
+    <Compile Include="Expression\AstNode.cs" />
+    <Compile Include="Expression\ExpressionContext.cs" />
+    <Compile Include="Expression\ExpressionException.cs" />
+    <Compile Include="Expression\ExpressionParser.cs" />
+    <Compile Include="Expression\Token.cs" />
+    <Compile Include="Gui\FormatEditor.xaml.cs">
+      <DependentUpon>FormatEditor.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Gui\GuiRegisterHelper.cs" />
+    <Compile Include="Attribute\HitCountFormatAttribute.cs" />
+    <Compile Include="Gui\OpenFormatEditorCreator.cs" />
+    <Compile Include="Attribute\PerformanceFormatAttribute.cs" />
+    <Compile Include="Formatter\RtppFormatter.cs" />
+    <Compile Include="Utility\ModsUtils.cs" />
+    <Compile Include="Utility\SmoothMath.cs" />
+    <Compile Include="DisplayerController.cs" />
+    <Compile Include="Calculator\Oppai.cs" />
+    <Compile Include="RealTimePPDisplayerPlugin.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Setting.cs" />
     <Compile Include="Displayer\View\PPWindow.xaml.cs">
       <DependentUpon>PPWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Warpper\OsuRTDataProviderWarpper.cs" />
+    <Compile Include="Warpper\PublicOsuBotTransferWarpper.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\osuSync\OfficalPlugins\ConfigGUI\ConfigGUI.csproj">
+      <Project>{0f922afa-bbc0-44a0-8ca7-d408d5dd8298}</Project>
+      <Name>ConfigGUI</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\osuSync\Sync\Sync.csproj">
+      <Project>{fbd514c2-2830-479e-b050-d1c383028456}</Project>
+      <Name>Sync</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\MemoryReader\OsuRTDataProvider.csproj">
+      <Project>{d518dc59-cc9a-4886-839f-7691d5efae56}</Project>
+      <Name>OsuRTDataProvider</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\PublicBotTransferPlugin\PublicOsuBotTransfer.csproj">
+      <Project>{b9af0f80-ee21-41b2-a1d8-877fe546be65}</Project>
+      <Name>PublicOsuBotTransfer</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Page Include="Displayer\View\PPWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
+    <Page Include="Gui\FormatEditor.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Gui\MultiOutputEditor.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>
-    </PostBuildEvent>
+    <PostBuildEvent>copy /y $(TargetPath) $(SolutionDir)\Sync\bin\$(ConfigurationName)\Plugins
+copy /y $(ProjectDir)oppai.dll $(SolutionDir)\Sync\bin\$(ConfigurationName)
+xcopy $(ProjectDir)\Language $(ProjectDir)\$(OutDir)\Language\ /s/e/y</PostBuildEvent>
   </PropertyGroup>
 </Project>

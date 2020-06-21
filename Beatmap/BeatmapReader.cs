@@ -1,18 +1,16 @@
-﻿using OsuRTDataProvider.Listen;
-using OsuRTDataProvider.Mods;
-using RealTimePPDisplayer.Calculator;
-using RealTimePPDisplayer.PerformancePoint;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using OsuRTDataProvider.Listen;
 
 namespace RealTimePPDisplayer.Beatmap
 {
-    class BeatmapReader
+    public class BeatmapReader
     {
         public struct BeatmapHeader
         {
@@ -20,63 +18,67 @@ namespace RealTimePPDisplayer.Beatmap
             public int Length;
         }
 
-        private BeatmapHeader m_beatmap_header_span;
-        public BeatmapHeader BeatmapHeaderSpan => m_beatmap_header_span;
+        public OsuRTDataProvider.BeatmapInfo.Beatmap OrtdpBeatmap { get; }
 
-        public byte[] RawData { get; private set; }
-        public List<BeatmapObject> Objects { get; private set; } = new List<BeatmapObject>();
+        private BeatmapHeader _beatmapHeaderSpan;
+        public BeatmapHeader BeatmapHeaderSpan => _beatmapHeaderSpan;
+
+        public byte[] RawData { get; }
+        public List<BeatmapObject> Objects { get; } = new List<BeatmapObject>();
 
         public int ObjectsCount => Objects.Count;
+        public int BeatmapDuration => Objects.LastOrDefault()?.StartTime??-1;
 
-        public OsuPlayMode Mode { get; set; }
+        public int Mode { get; set; }
+        public double ApproachRate { get; set; } = -1;
         public double OverallDifficulty { get; private set; }
-        public double HPDrainRate { get; private set; }
+        public double HpDrainRate { get; private set; }
         public double CircleSize { get; private set; }
         public int KeyCount { get; private set; }
 
-        public BeatmapReader(OsuRTDataProvider.BeatmapInfo.Beatmap beatmap,OsuPlayMode mode=OsuPlayMode.Unknown)
+        public BeatmapReader(OsuRTDataProvider.BeatmapInfo.Beatmap beatmap,int mode)
         {
-            m_beatmap_header_span.Offset = 0;
-            m_beatmap_header_span.Length = 0;
+            OrtdpBeatmap = beatmap;
+            _beatmapHeaderSpan.Offset = 0;
+            _beatmapHeaderSpan.Length = 0;
             Mode = mode;
 
-            using (var fs = File.OpenRead(beatmap.FilenameFull))
+            StringBuilder sb=new StringBuilder();
+
+            foreach (var line in File.ReadAllLines(beatmap.FilenameFull))
             {
-                RawData = new byte[fs.Length];
-                fs.Read(RawData, 0, (int)fs.Length);
+                sb.Append($"{line}\n");
             }
+
+            RawData = Encoding.UTF8.GetBytes(sb.ToString());
             Parse();
         }
 
         public void Parse()
         {
-            int bias = 2;
-
-            int pos = Array.IndexOf(RawData, (byte)'\n');
-            if (RawData[pos - 1] != '\r')
-                bias = 1;
-
-            pos = 0;
+            int bias = 1;
+            int pos = 0;
 
             using (var ms = new MemoryStream(RawData))
             {
                 using (var sr = new StreamReader(ms))
                 {
-                    string block_name = "";
+                    string blockName = "";
                     while (!sr.EndOfStream)
                     {
-                        string raw_line = sr.ReadLine();
-                        int raw_line_len = Encoding.UTF8.GetByteCount(raw_line) + bias;
+                        string rawLine = sr.ReadLine();
+                        Debug.Assert(rawLine != null, nameof(rawLine) + " != null");
+                        int rawLineLen = Encoding.UTF8.GetByteCount(rawLine) + bias;
 
-                        string line = raw_line.Trim();
+                        string line = rawLine.Trim();
 
                         if (line.StartsWith("["))
                         {
-                            block_name = line.Substring(1, line.Length - 2).Trim();
-                            if (block_name == "HitObjects")
-                                m_beatmap_header_span.Length = pos + raw_line_len;
+                            blockName = line.Substring(1, line.Length - 2).Trim();
+                            if (blockName == "HitObjects")
+                                _beatmapHeaderSpan.Length = pos + rawLineLen;
                         }
-                        else if (!string.IsNullOrEmpty(line) && (block_name == "General" || block_name == "Difficulty"))
+                        else if (!string.IsNullOrEmpty(line) && (blockName == "General" || blockName == "Difficulty"))
                         {
                             GetPropertyString(line, out var prop, out var val);
 
@@ -84,47 +86,75 @@ namespace RealTimePPDisplayer.Beatmap
                             {
                                 case "Mode":
                                     OsuPlayMode mode = (OsuPlayMode)int.Parse(val);
-                                    if (mode != OsuPlayMode.Mania && Mode == OsuPlayMode.Mania)
+                                    if (mode != OsuPlayMode.Mania && Mode == (int)OsuPlayMode.Mania)
                                     {
-                                        Sync.Tools.IO.CurrentIO.WriteColor($"[RTPPD::Beatmap]Only support mania beatmap.", ConsoleColor.Yellow);
-                                        Mode = mode;
+                                        Sync.Tools.IO.CurrentIO.WriteColor("[RTPPD::Beatmap]Only support mania beatmap.", ConsoleColor.Yellow);
+                                        Mode = (int)mode;
                                     }
-                                    else if (mode == OsuPlayMode.Mania && Mode != OsuPlayMode.Mania)
+                                    else if (mode == OsuPlayMode.Mania && Mode != (int)OsuPlayMode.Mania)
                                     {
-                                        Mode = mode;
+                                        Mode = (int)mode;
                                     }
+                                    break;
+                                case "ApproachRate":
+                                    ApproachRate = double.Parse(val, CultureInfo.InvariantCulture);
                                     break;
                                 case "OverallDifficulty":
                                     OverallDifficulty = double.Parse(val, CultureInfo.InvariantCulture);
                                     break;
                                 case "HPDrainRate":
-                                    HPDrainRate = double.Parse(val, CultureInfo.InvariantCulture);
+                                    HpDrainRate = double.Parse(val, CultureInfo.InvariantCulture);
                                     break;
                                 case "CircleSize":
                                     CircleSize = double.Parse(val,CultureInfo.InvariantCulture);
-                                    if (Mode == OsuPlayMode.Mania)
+                                    if (Mode == (int)OsuPlayMode.Mania)
                                         KeyCount = int.Parse(val);
                                     break;
                             }
                         }
-                        else if (!string.IsNullOrEmpty(line) && block_name == "HitObjects")
+                        else if (!string.IsNullOrEmpty(line) && blockName == "HitObjects")
                         {
                             BeatmapObject obj;
-                            if (Mode != OsuPlayMode.Mania)
-                                obj = new BeatmapObject(line, pos, raw_line_len, this);
-                            else
-                                obj = new ManiaBeatmapObject(line, pos, raw_line_len, this);
+
+                            switch (Mode)
+                            {
+                                case (int)OsuPlayMode.Mania:
+                                    obj = new ManiaBeatmapObject(line, pos, rawLineLen, this);
+                                    break;
+                                case (int)OsuPlayMode.CatchTheBeat:
+                                case (int)OsuPlayMode.Osu:
+                                case (int)OsuPlayMode.Taiko:
+                                    obj =  new BeatmapObject(line, pos, rawLineLen, this);
+                                    break;
+                                default:
+                                    obj = null;
+                                    break;
+                            }
 
                             Objects.Add(obj);
                         }
 
-                        pos += raw_line_len;
+                        pos += rawLineLen;
                     }
                 }
             }
 
-            if (Mode == OsuPlayMode.Mania)
+            if (Mode == (int)OsuPlayMode.Mania)
                 Objects.Sort((a,b)=>a.StartTime-b.StartTime);
+        }
+
+        public int GetPosition(int endTime, out int nobject)
+        {
+            int pos = BeatmapHeaderSpan.Length;
+            nobject = 0;
+            foreach (var obj in Objects)
+            {
+                if (obj.StartTime > endTime) break;
+                pos += obj.Length;
+                nobject++;
+            }
+
+            return pos;
         }
 
         #region Tool Function

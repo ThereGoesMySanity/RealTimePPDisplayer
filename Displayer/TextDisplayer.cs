@@ -1,69 +1,110 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using RealTimePPDisplayer.Formatter;
+using System;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace RealTimePPDisplayer.Displayer
 {
-    class TextDisplayer : DisplayerBase
+    sealed class TextDisplayer : DisplayerBase
     {
-        private char[] m_pp_buffer = new char[1024];
-        private char[] m_hit_buffer = new char[1024];
-        private int m_pp_str_len = 0;
-        private int m_hit_str_len = 0;
-        private string m_filename;
+        private readonly char[] _ppBuffer = new char[1024];
+        private readonly char[] _hitBuffer = new char[1024];
+        private int _ppStrLen;
+        private int _hitStrLen;
 
-        public TextDisplayer(string filename)
+        private readonly string[] _filenames=new string[2];
+
+        private readonly bool _splited;
+
+        private FormatterBase ppFormatter;
+        private FormatterBase hitCountFormatter;
+
+        public TextDisplayer(int? id,string filename,bool splited=false):base(id)
         {
-            if (Path.IsPathRooted(filename))
-                m_filename = filename;
+            _splited = splited;
+
+            ppFormatter = RtppFormatter.GetPPFormatter();
+            hitCountFormatter = RtppFormatter.GetHitCountFormatter();
+            if (ppFormatter != null)
+                ppFormatter.Displayer = this;
+            if (hitCountFormatter != null)
+                hitCountFormatter.Displayer = this;
+
+            if (!Path.IsPathRooted(filename))
+                _filenames[0] = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
             else
-                m_filename = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, filename);
+                _filenames[0] = filename;
+
+            if (_splited)
+            {
+                string ext = Path.GetExtension(_filenames[0]);
+                string path = Path.GetDirectoryName(_filenames[0]);
+                string file = Path.GetFileNameWithoutExtension(_filenames[0]);
+                _filenames[0] = $"{path}{Path.DirectorySeparatorChar}{file}-pp{ext}";
+                _filenames[1] = $"{path}{Path.DirectorySeparatorChar}{file}-hit{ext}";
+            }
             Clear();//Create File
         }
 
         public override void Clear()
         {
-            using (var fp = File.Open(m_filename, FileMode.Create, FileAccess.Write, FileShare.Read))
-            {
-            }
+            base.Clear();
+
+            if (ppFormatter is IFormatterClearable ppfmt)
+                ppfmt.Clear();
+
+            if (hitCountFormatter is IFormatterClearable hitfmt)
+                hitfmt.Clear();
+
+            using (File.Open(_filenames[0], FileMode.Create, FileAccess.Write, FileShare.Read))
+                if(_splited)
+                    using (File.Open(_filenames[1], FileMode.Create, FileAccess.Write, FileShare.Read)){}
         }
-
-        public override void OnUpdatePP(PPTuple tuple)
-        {
-            var formatter = GetFormattedPP(tuple);
-
-            m_pp_str_len = formatter.CopyTo(0,m_pp_buffer,0);
-        }
-
-        public override void OnUpdateHitCount(HitCountTuple tuple)
-        {
-            var formatter = GetFormattedHitCount(tuple);
-
-            m_hit_str_len = formatter.CopyTo(0, m_hit_buffer, 0);
-        }
-
-        private bool _init = false;
+        private bool _init;
 
         public override void Display()
         {
             if (!_init)
             {
-                Sync.Tools.IO.CurrentIO.WriteColor(string.Format(DefaultLanguage.TEXT_MODE_OUTPUT_PATH_FORMAT, m_filename), ConsoleColor.DarkGreen);
+                foreach(var filename in _filenames)
+                    if(filename!=null)
+                        Sync.Tools.IO.CurrentIO.WriteColor(string.Format(DefaultLanguage.TEXT_MODE_OUTPUT_PATH_FORMAT, filename), ConsoleColor.DarkGreen);
                 _init = true;
             }
 
-            using (var fp = File.Open(m_filename, FileMode.Create, FileAccess.Write, FileShare.Read))
+            string s = ppFormatter.GetFormattedString();
+            _ppStrLen = s.Length;
+            s.CopyTo(0,_ppBuffer,0, _ppStrLen);
+
+            s = hitCountFormatter.GetFormattedString();
+            _hitStrLen = s.Length;
+            s.CopyTo(0, _hitBuffer, 0, _hitStrLen);
+
+            StreamWriter[] streamWriters = new StreamWriter[2];
+
+            if (_splited)
             {
-                using (var sw = new StreamWriter(fp))
-                {
-                    sw.Write(m_pp_buffer, 0, m_pp_str_len);
-                    sw.Write('\n');
-                    sw.Write(m_hit_buffer, 0, m_hit_str_len);
-                }
+                streamWriters[0] = new StreamWriter(File.Open(_filenames[0], FileMode.Create, FileAccess.Write, FileShare.Read));
+                streamWriters[1] = new StreamWriter(File.Open(_filenames[1], FileMode.Create, FileAccess.Write, FileShare.Read));
             }
+            else
+            {
+                streamWriters[0] = new StreamWriter(File.Open(_filenames[0], FileMode.Create, FileAccess.Write, FileShare.Read));
+                streamWriters[1] = streamWriters[0];
+            }
+
+            streamWriters[0].Write(_ppBuffer, 0, _ppStrLen);
+            if (!_splited)
+                streamWriters[0].Write(Environment.NewLine);
+
+            streamWriters[1].Write(_hitBuffer, 0, _hitStrLen);
+
+            for (int i=0; i < _filenames.Length; i++)
+                if(_filenames[i]!=null)
+                    streamWriters[i].Dispose();
+        }
+        public override void OnDestroy()
+        {
+            Clear();
         }
     }
 }

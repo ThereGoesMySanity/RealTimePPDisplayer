@@ -1,92 +1,125 @@
 ﻿using RealTimePPDisplayer.Displayer.View;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using RealTimePPDisplayer.Expression;
+using RealTimePPDisplayer.Formatter;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Threading;
+using System.Windows;
 
 namespace RealTimePPDisplayer.Displayer
 {
     class WpfDisplayer : DisplayerBase
     {
-        private PPWindow m_win;
-        private Thread m_win_thread;
+        private PPWindow _win;
+        private bool _output = false;
 
-        private bool m_output = false;
+        private FormatterBase ppFormatter;
+        private FormatterBase hitCountFormatter;
 
-        PPTuple m_current_pp;
-        PPTuple m_target_pp;
-        PPTuple m_speed;
-
-        public WpfDisplayer(int? id)
+        public WpfDisplayer(int? id, FormatterBase ppFmt, FormatterBase hitFmt):base(id)
         {
-            m_win_thread = new Thread(() => ShowPPWindow(id));
-            m_win_thread.SetApartmentState(ApartmentState.STA);
-            m_win_thread.Start();
+            ppFormatter = ppFmt;
+            hitCountFormatter = hitFmt;
+            Initialize();
+        }
+
+        public WpfDisplayer(int? id):base(id)
+        {
+            ppFormatter = FormatterBase.GetPPFormatter();
+            hitCountFormatter = FormatterBase.GetHitCountFormatter();
+            Initialize();
+        }
+
+        public void Initialize()
+        {
+            if(ppFormatter!=null)
+                ppFormatter.Displayer = this;
+            if (hitCountFormatter != null)
+                hitCountFormatter.Displayer = this;
+
+            if (Application.Current == null)
+            {
+                var winThread = new Thread(() => new Application().Run())
+                {
+                    Name = "STA WPF Application Thread"
+                };
+                winThread.SetApartmentState(ApartmentState.STA);
+                winThread.Start();
+                Thread.Sleep(100);
+            }
+
+            Debug.Assert(Application.Current != null, "Application.Current != null");
+            Application.Current.Dispatcher.Invoke(() => ShowPPWindow(Id));
+        }
+
+        public void HideRow(int row)
+        {
+            _win?.HideRow(row);
         }
 
         public override void Clear()
         {
-            m_output = false;
-            m_speed = PPTuple.Empty;
-            m_current_pp = PPTuple.Empty;
-            m_target_pp = PPTuple.Empty;
+            base.Clear();
+            _output = false;
 
-            
-            if (m_win != null)
+            if (ppFormatter is IFormatterClearable ppfmt)
+                ppfmt.Clear();
+
+            if (hitCountFormatter is IFormatterClearable hitfmt)
+                hitfmt.Clear();
+
+            if (_win != null)
             {
-                m_win.HitCountContext = "";
-                m_win.PPContext = "";
+                _win.HitCountContext = "";
+                _win.PpContext = "";
             }
         }
 
-        public override void OnUpdatePP(PPTuple tuple)
+        public override void Display()
         {
-            m_output = true;
-
-            m_target_pp = tuple;
-        }
-
-        public override void OnUpdateHitCount(HitCountTuple tuple)
-        {
-            var formatter = GetFormattedHitCount(tuple);
-
-            string str = formatter.ToString();
-
-            if (m_win != null)
-                m_win.HitCountContext = formatter.ToString();
+            if (_win != null)
+            {
+                if (hitCountFormatter != null)
+                {
+                    _win.HitCountContext = hitCountFormatter.GetFormattedString();
+                }
+            }
+                    
+            _output = true;
+            _win.Refresh();
         }
 
         public override void FixedDisplay(double time)
         {
-            if (!m_output)return;
+            if (!_output)return;
 
-            m_current_pp=SmoothMath.SmoothDampPPTuple(m_current_pp, m_target_pp, ref m_speed, time);
-
-            var formatter = GetFormattedPP(m_current_pp);
-            string str = formatter.ToString();
-
-            if (m_win != null)
-                m_win.PPContext = formatter.ToString();
+            if (ppFormatter != null)
+            {
+                if (_win != null)
+                    _win.PpContext = ppFormatter.GetFormattedString();
+                _win.Refresh();
+            }
+            else
+            {
+                _win.PpContext = "";
+            }
         }
 
         private void ShowPPWindow(int? id)
         {
-            m_win = new PPWindow(Setting.SmoothTime, Setting.FPS);
+            _win = new PPWindow();
 
             if (id != null)
-                m_win.Title += $"{id}";
+                _win.Title += $"{id}";
 
-            m_win.client_id.Content = id?.ToString() ?? "";
+            _win.client_id.Content = id?.ToString() ?? "";
 
-            m_win.ShowDialog();
+            _win.Show();
         }
 
         public override void OnDestroy()
         {
-            m_win.Dispatcher.Invoke(() => m_win.Close());
+            _win.Dispatcher.Invoke(() => _win.Close());
         }
     }
 }

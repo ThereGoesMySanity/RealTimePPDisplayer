@@ -1,73 +1,80 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using OsuRTDataProvider.Listen;
 using OsuRTDataProvider.Mods;
 using RealTimePPDisplayer.Beatmap;
 using RealTimePPDisplayer.Displayer;
+using RealTimePPDisplayer.Utility;
 using static OsuRTDataProvider.Mods.ModsInfo;
 
 namespace RealTimePPDisplayer.Calculator
 {
-    class ManiaPerformanceCalculator : PerformanceCalculatorBase
+    public sealed class ManiaPerformanceCalculator : PerformanceCalculatorBase
     {
-        private const OsuPlayMode s_mode = OsuPlayMode.Mania;
-        private const double STRAIN_STEP = 400;
-        private const double DECAY_WEIGHT = 0.9;
-        private const double STAR_SCALING_FACTOR = 0.018;
+        private const int c_mode = 3;//Mania
+        private const double c_strainStep = 400;
+        private const double c_decayWeight = 0.9;
+        private const double c_starScalingFactor = 0.018;
 
-        private ModsInfo m_mods;
-        private double m_beatmap_stars;
-        PPTuple tuple = PPTuple.Empty;
+        private uint _mods;
+        private PPTuple _tuple = PPTuple.Empty;
+
+        private double _stars = 0.0;
+        private double _rt_stars = 0.0;
+        public override double Stars => _stars;
+        public override double RealTimeStars => _rt_stars;
 
         #region Mania Difficultty Calculate
         private void CalculateStrainValues(int nobjects)
         {
-            var prev_object = Beatmap.Objects[0] as ManiaBeatmapObject;
+            var prevObject = Beatmap.Objects[0] as ManiaBeatmapObject;
 
             for (int i = 1; i < nobjects; i++)
             {
-                var cur_object = Beatmap.Objects[i] as ManiaBeatmapObject;
-                cur_object.ManiaCalculateStrains(prev_object, m_mods.TimeRate);
-                prev_object = cur_object;
+                var curObject = Beatmap.Objects[i] as ManiaBeatmapObject;
+                Debug.Assert(curObject != null, nameof(curObject) + " != null");
+                curObject.ManiaCalculateStrains(prevObject, ModsUtils.GetTimeRate(_mods));
+                prevObject = curObject;
             }
         }
 
         private double CalculateDifficulty(int nobjects)
         {
-            double actual_strain_step = STRAIN_STEP * m_mods.TimeRate;
+            double actualStrainStep = c_strainStep * ModsUtils.GetTimeRate(_mods);
 
-            List<double> highest_strains = new List<double>();
-            double interval_end_time = actual_strain_step;
-            double maximum_strain = 0;
+            List<double> highestStrains = new List<double>();
+            double intervalEndTime = actualStrainStep;
+            double maximumStrain = 0;
 
             ManiaBeatmapObject prev = null;
 
-            for (int i=0;i<nobjects;i++)
+            for (int i = 0; i < nobjects; i++)
             {
                 ManiaBeatmapObject note = Beatmap.Objects[i] as ManiaBeatmapObject;
 
-                while (note.StartTime > interval_end_time)
+                Debug.Assert(note != null, nameof(note) + " != null");
+                while (note.StartTime > intervalEndTime)
                 {
-                    highest_strains.Add(maximum_strain);
+                    highestStrains.Add(maximumStrain);
 
                     if (prev == null)
-                        maximum_strain = 0;
+                        maximumStrain = 0;
                     else
                     {
-                        double individual_decay = Math.Pow(ManiaBeatmapObject.INDIVIDUAL_DECAY_BASE, (interval_end_time - prev.StartTime) / 1000.0);
-                        double overall_decay = Math.Pow(ManiaBeatmapObject.OVERALL_DECAY_BASE, (interval_end_time - prev.StartTime) / 1000.0);
-                        maximum_strain = prev.IndividualStrain * individual_decay + prev.OverallStrain * overall_decay;
+                        double individualDecay = Math.Pow(ManiaBeatmapObject.INDIVIDUAL_DECAY_BASE, (intervalEndTime - prev.StartTime) / 1000.0);
+                        double overallDecay = Math.Pow(ManiaBeatmapObject.OVERALL_DECAY_BASE, (intervalEndTime - prev.StartTime) / 1000.0);
+                        maximumStrain = prev.IndividualStrain * individualDecay + prev.OverallStrain * overallDecay;
                     }
 
-                    interval_end_time += actual_strain_step;
+                    intervalEndTime += actualStrainStep;
                 }
 
                 double strain = note.IndividualStrain + note.OverallStrain;
-                if (strain > maximum_strain)
-                    maximum_strain = strain;
+                if (strain > maximumStrain)
+                    maximumStrain = strain;
 
                 prev = note;
             }
@@ -75,126 +82,194 @@ namespace RealTimePPDisplayer.Calculator
             double diff = 0;
             double weigth = 1;
 
-            highest_strains.Sort((a, b) => b.CompareTo(a));
+            highestStrains.Sort((a, b) => b.CompareTo(a));
 
-            foreach (var strain in highest_strains)
+            foreach (var strain in highestStrains)
             {
                 diff += strain * weigth;
-                weigth *= DECAY_WEIGHT;
+                weigth *= c_decayWeight;
             }
 
             return diff;
         }
         #endregion
 
-        private int _nobjects = 0;
-
-        public override PPTuple GetPP(ModsInfo mods)
+        public override PPTuple GetPerformance()
         {
             if (Beatmap == null) return PPTuple.Empty;
-            if (Beatmap.Mode != s_mode) return PPTuple.Empty;
+            if (Beatmap.Mode != (int)c_mode) return PPTuple.Empty;
 
-            if (!_init||m_mods!=mods)
+
+            //Calculate Max PP
+            if (!_init || _mods != Mods)
             {
-                m_mods = mods;
+                _mods = Mods;
                 CalculateStrainValues(Beatmap.ObjectsCount);
-                m_beatmap_stars = CalculateDifficulty(Beatmap.ObjectsCount) * STAR_SCALING_FACTOR;
-                CalculatePerformance(m_beatmap_stars,1000000, 100.0, Beatmap.ObjectsCount, out tuple.MaxPP, out tuple.MaxSpeedPP, out tuple.MaxAccuracyPP);
-                Sync.Tools.IO.CurrentIO.Write($"Difficulty:{m_beatmap_stars}*");
+                _stars = CalculateDifficulty(Beatmap.ObjectsCount) * c_starScalingFactor;
+                CalculatePerformance(_stars, 1000000, 100.0, Beatmap.ObjectsCount, out _tuple.MaxPP, out _tuple.MaxSpeedPP, out _tuple.MaxAccuracyPP);
+                Sync.Tools.IO.CurrentIO.Write($"[RTPPD::Mania]Difficulty:{_stars:F2}*");
                 _init = true;
             }
 
+            //Calculate RTPP
             int nobjects = GetCurrentObjectCount(Time);
-            if (nobjects != _nobjects)
-            {
-                ReinitializeObjects();
+            ReinitializeObjects();
 
-                CalculateStrainValues(nobjects);
-                double stars = CalculateDifficulty(nobjects) * STAR_SCALING_FACTOR;
+            CalculateStrainValues(nobjects);
+            _rt_stars = CalculateDifficulty(nobjects) * c_starScalingFactor;
 
-                double acc = ManiaCalculateAccuracy(Count300, CountGeki, CountKatu, Count100, Count50, CountMiss) * 100.0;
-
-                CalculatePerformance(stars, RealScore, acc, nobjects, out tuple.RealTimePP, out tuple.RealTimeSpeedPP, out tuple.RealTimeAccuracyPP);
-                _nobjects = nobjects;
-            }
+            CalculatePerformance(_rt_stars, RealScore, Accuracy, nobjects, out _tuple.RealTimePP, out _tuple.RealTimeSpeedPP, out _tuple.RealTimeAccuracyPP);
             //No Fc pp
 
-            return tuple;
+            return _tuple;
         }
 
-        private bool _init = false;
+        private bool _init;
         public override void ClearCache()
         {
+            base.ClearCache();
             if (Beatmap == null) return;
-            _nobjects = 0;
             _init = false;
             ReinitializeObjects();
         }
 
         private void ReinitializeObjects()
         {
-            if (Beatmap.Mode != s_mode) return;
-            foreach (ManiaBeatmapObject obj in Beatmap.Objects)
+            if (Beatmap.Mode != (int)c_mode) return;
+            foreach (var o in Beatmap.Objects)
+            {
+                var obj = (ManiaBeatmapObject) o;
                 obj.ClearStrainsValue();
+            }
         }
 
-        private void CalculatePerformance(double stars,int score,double accuracy,int objects,out double total,out double strain,out double acc)
+        private void CalculatePerformance(double stars, int score, double accuracy, int objects, out double total, out double strain, out double acc)
         {
-            strain = CalculateStrainValue(stars,score,objects);
-            acc = CalculateAccuracyValue(accuracy, objects);
-            total = Math.Pow(Math.Pow(acc, 1.1) + Math.Pow(strain, 1.1), 1 / 1.1) * 1.1;
+            strain = CalculateStrainValue(stars, score, objects);
+            acc = CalculateAccuracyValue(accuracy, score, strain, objects);
+
+            double multiplier = 0.8;
+
+            if (Mods.HasMod(ModsInfo.Mods.NoFail))
+                multiplier *= 0.9;
+
+            if (Mods.HasMod(ModsInfo.Mods.SpunOut))
+                multiplier *= 0.95f;
+
+            if (Mods.HasMod(ModsInfo.Mods.Easy))
+                multiplier *= 0.50f;
+
+            total = Math.Pow(Math.Pow(acc, 1.1) + Math.Pow(strain, 1.1), 1.0 / 1.1) * multiplier;
         }
 
-        private double CalculateAccuracyValue(double acc,int objects)
+        private double CalculateAccuracyValue(double acc, int score, double strain, int objects)
         {
-            return Math.Pow((150.0 / (64 - 3 * RealOverallDifficulty)) * Math.Pow(acc / 100.0, 16), 1.8) * 2.5 * Math.Min(1.15, Math.Pow(objects / 1500.0, 0.3));
+            if (HitWindow300 <= 0)
+            {
+                return 0;
+            }
+
+            double accValue = Math.Max(0.0, 0.2 - ((HitWindow300 - 34) * 0.006667)) * strain
+                * Math.Pow((Math.Max(0.0, score - 960000) / 40000.0), 1.1);
+            return accValue;
         }
 
-        private double CalculateStrainValue(double stars,int score,int objects)
+        private double CalculateStrainValue(double stars, int score, int objects)
         {
-            double strain_multipler;
+            double strainValue = Math.Pow(5.0 * Math.Max(1.0, stars / 0.2) - 4.0, 2.2) / 135.0;
+            strainValue *= 1 + 0.1 * Math.Min(1.0, objects / 1500.0);
+
             if (score <= 500000)
-                strain_multipler = (score / 500000.0) * 0.1;
+                strainValue *= (score / 500000.0) * 0.1;
             else if (score <= 600000)
-                strain_multipler = (score - 500000) / 100000.0 * 0.2 + 0.1;
+                strainValue *= (score - 500000.0) / 100000.0 * 0.3;
             else if (score <= 700000)
-                strain_multipler = (score - 600000) / 100000.0 * 0.35 + 0.3;
+                strainValue *= 0.30 + (score - 600000.0) / 100000.0 * 0.25;
             else if (score <= 800000)
-                strain_multipler = (score - 700000) / 100000.0 * 0.2 + 0.65;
+                strainValue *= 0.55 + (score - 700000.0) / 100000.0 * 0.2;
             else if (score <= 900000)
-                strain_multipler = (score - 800000) / 100000.0 * 0.1 + 0.85;
+                strainValue *= 0.75 + (score - 800000.0) / 100000.0 * 0.15;
             else
-                strain_multipler = (score - 900000) / 100000.0 * 0.05 + 0.95;
+                strainValue *= 0.90 + (score - 900000.0) / 100000.0 * 0.1;
 
-            return (Math.Pow(5 * Math.Max(1, stars / 0.0825) - 4, 3) / 110000) * (1 + 0.1 * Math.Min(1, objects / 1500.0)) * strain_multipler;
-        }
-
-        private static double ManiaCalculateAccuracy(int n300,int n300g,int n200,int n100,int n50,int nmiss)
-        {
-            return ((n300 + n300g) * 300.0 + n200 * 200.0 + n100 * 100.0 + n50 * 50) / ((n300+n300g+n200+n100+n50+nmiss)*300.0);
+            return strainValue;
         }
 
         private int GetCurrentObjectCount(int time)
         {
-            for (int i = 0; i < Beatmap.ObjectsCount; i++)
-                if (Beatmap.Objects[i].StartTime > time)
-                    return i+1;
-            return Beatmap.ObjectsCount;
+            int count = 0;
+            foreach (var obj in Beatmap.Objects)
+            {
+                if (obj.StartTime >= time)
+                    return count;
+                
+                count++;
+            }
+
+            return count;
+        }
+
+        public override double Accuracy
+        {
+            get
+            {
+                int total = (Count300 + CountGeki + CountKatu + Count100 + Count50 + CountMiss);
+                double acc = 1;
+                if(total > 0)
+                 acc = ((Count300 + CountGeki) * 300.0 + CountKatu * 200.0 + Count100 * 100.0 + Count50 * 50) / (total * 300.0);
+                return acc * 100;
+            }
+        }
+
+        private double HitWindow300
+        {
+            get
+            {
+                double od = Math.Min(10.0, Math.Max(0, 10.0 - RealOverallDifficulty));
+                od = 34 + 3 * od;
+
+                if (Mods.HasMod(ModsInfo.Mods.Easy))
+                    od *= 1.4;
+
+                if (Mods.HasMod(ModsInfo.Mods.HardRock))
+                    od /= 1.4;
+
+                if (Mods.HasMod(ModsInfo.Mods.HalfTime))
+                    od *= 0.75;
+
+                if (Mods.HasMod(ModsInfo.Mods.DoubleTime))
+                    od *= 1.5;
+
+                return (int)od;
+            }
         }
 
         private int RealScore
         {
             get
             {
-                double score_multiplier = 1.0;
-                if (m_mods.HasMod(Mods.Easy)) score_multiplier *= 0.5;
-                if (m_mods.HasMod(Mods.NoFail)) score_multiplier *= 0.5;
-                if (m_mods.HasMod(Mods.HalfTime)) score_multiplier *= 0.5;
-                return (int)(Score / score_multiplier);
+                double scoreMultiplier = 1.0;
+                if (_mods.HasMod(ModsInfo.Mods.Easy)) scoreMultiplier *= 0.5;
+                if (_mods.HasMod(ModsInfo.Mods.NoFail)) scoreMultiplier *= 0.5;
+                if (_mods.HasMod(ModsInfo.Mods.HalfTime)) scoreMultiplier *= 0.5;
+                return (int)(Score / scoreMultiplier);
             }
         }
 
-        private double RealOverallDifficulty=>Beatmap.OverallDifficulty*(m_mods.HasMod(Mods.Easy)?0.5:1.0);
+        private double RealOverallDifficulty{
+            get
+            {
+                double od=Beatmap.OverallDifficulty;
+
+                if (Mods.HasMod(ModsInfo.Mods.Easy))
+                    od = Math.Max(0, od / 2);
+
+                if (Mods.HasMod(ModsInfo.Mods.HardRock))
+                    od = Math.Min(10, od * 1.4);
+
+                return od;
+            }
+        }
 
     }
 }

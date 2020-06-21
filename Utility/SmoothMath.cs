@@ -12,10 +12,10 @@ namespace RealTimePPDisplayer
         //From: http://devblog.aliasinggames.com/inertialdamp-unity-smoothdamp-alternative/
         public static double SmoothDamp(double previousValue, double targetValue, ref double speed, double smoothTime, double dt)
         {
-            double T1 = 0.36 * smoothTime;
-            double T2 = 0.64 * smoothTime;
+            double t1 = 0.36 * smoothTime;
+            double t2 = 0.64 * smoothTime;
             double x = previousValue - targetValue;
-            double newSpeed = speed + dt * (-1.0 / (T1 * T2) * x - (T1 + T2) / (T1 * T2) * speed);
+            double newSpeed = speed + dt * (-1.0 / (t1 * t2) * x - (t1 + t2) / (t1 * t2) * speed);
             double newValue = x + dt * speed;
             speed = newSpeed;
             double result = targetValue + newValue;
@@ -44,6 +44,37 @@ namespace RealTimePPDisplayer
             result.MaxAccuracyPP = targetValue.MaxAccuracyPP;
 
             return result;
+        }
+
+        private static Dictionary<string, double> smoothValues = new Dictionary<string, double>();
+
+        public static double SmoothVariable(string name, double varVal)
+        {
+            var _target = $"{name}_target";
+            var _current = $"{name}_current";
+            var _speed = $"{name}_speed";
+
+            smoothValues[_target] = varVal;
+
+            if (!smoothValues.ContainsKey(_current))
+            {
+                smoothValues[_current] = varVal;
+                smoothValues[_speed] = 0;
+            }
+
+            double speed = smoothValues[_speed];
+            double varcur = smoothValues[_current];
+
+            varcur = SmoothDamp(varcur, smoothValues[_target], ref speed, Setting.SmoothTime * 0.001, 1.0 / Setting.FPS);
+
+            smoothValues[_current] = varcur;
+            smoothValues[_speed] = speed;
+            return smoothValues[_current];
+        }
+
+        public static void SmoothClean(string name)
+        {
+            smoothValues[$"{name}_target"] = smoothValues[$"{name}_current"] = smoothValues[$"{name}_speed"] = 0;
         }
     }
 }

@@ -16,7 +16,7 @@ namespace RealTimePPDisplayer.Displayer.View
     public partial class PPWindow : Window, INotifyPropertyChanged
     { 
         #region construct
-        public PPWindow(int st,int fps)
+        public PPWindow()
         {
             InitializeComponent();
             DataContext = this;
@@ -41,7 +41,7 @@ namespace RealTimePPDisplayer.Displayer.View
 
         private void OnPropertyChanged(string propertyName)
         {
-            PropertyChangedEventHandler handler = this.PropertyChanged;
+            PropertyChangedEventHandler handler = PropertyChanged;
             if (handler != null)
             {
                 PropertyChangedEventArgs e = new PropertyChangedEventArgs(propertyName);
@@ -49,25 +49,25 @@ namespace RealTimePPDisplayer.Displayer.View
             }
         }
 
-        private string m_pp_context = "0.00pp";
-        public string PPContext
+        private string _ppContext = "0.00pp";
+        public string PpContext
         {
-            get => m_pp_context;
+            get => _ppContext;
             set
             {
-                m_pp_context = value;
-                OnPropertyChanged("PPContext");
+                _ppContext = value;
+                OnPropertyChanged(nameof(PpContext));
             }
         }
 
-        private string m_hit_count_context = "0x100 0x50 0xMiss";
+        private string _hitCountContext = "0x100 0x50 0xMiss";
         public string HitCountContext
         {
-            get => m_hit_count_context;
+            get => _hitCountContext;
             set
             {
-                m_hit_count_context = value;
-                OnPropertyChanged("HitCountContext");
+                _hitCountContext = value;
+                OnPropertyChanged(nameof(HitCountContext));
             }
         }
 
@@ -94,7 +94,6 @@ namespace RealTimePPDisplayer.Displayer.View
 
             //Hit Label
             hit_label.FontSize = Setting.HitCountFontSize;
-            hit_label.Visibility = Setting.DisplayHitObject ? Visibility.Visible : Visibility.Hidden;
             hit_label.Foreground = new SolidColorBrush()
             {
                 Color = Setting.HitCountFontColor
@@ -119,6 +118,10 @@ namespace RealTimePPDisplayer.Displayer.View
                 hit_label.Effect = new DropShadowEffect() { BlurRadius = 4 };
                 client_id.Effect = new DropShadowEffect() { BlurRadius = 3 };
             }
+            else
+            {
+                pp_label.Effect = hit_label.Effect = client_id.Effect = null;
+            }
 
             topmost_item.IsChecked = Setting.Topmost;
             topmost_item.Header = (string)DefaultLanguage.UI_MENU_TOPMOST;
@@ -127,12 +130,26 @@ namespace RealTimePPDisplayer.Displayer.View
 
         private void ReloadSetting()
         {
-            Dispatcher.Invoke(() => LoadSetting());
+            Dispatcher.Invoke(LoadSetting);
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
             Setting.OnSettingChanged -= ReloadSetting;
+        }
+
+        public void HideRow(int row)
+        {
+            Dispatcher.Invoke(()=>grid.RowDefinitions[row].Height = new GridLength(0));
+        }
+    }
+
+    static class ExtensionMethods
+    {
+        private static readonly Action s_emptyDelegate = delegate () { };
+        public static void Refresh(this UIElement uiElement)
+        {
+            uiElement.Dispatcher.Invoke(DispatcherPriority.Render, s_emptyDelegate);
         }
     }
 }

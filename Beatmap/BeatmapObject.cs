@@ -1,5 +1,4 @@
-﻿using OsuRTDataProvider.Listen;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace RealTimePPDisplayer.Beatmap
 {
-    class BeatmapObject
+    public class BeatmapObject
     {
         public int Offset { get; protected set; }
         public int Length { get; protected set; }

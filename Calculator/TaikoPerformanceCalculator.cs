@@ -3,29 +3,25 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using OsuRTDataProvider.Listen;
 using OsuRTDataProvider.Mods;
 using RealTimePPDisplayer.Beatmap;
 using RealTimePPDisplayer.Displayer;
-using RealTimePPDisplayer.PerformancePoint;
 
 namespace RealTimePPDisplayer.Calculator
 {
-    class TaikoPerformanceCalculator : OppaiPerformanceCalculator
+    public sealed class TaikoPerformanceCalculator : OppaiPerformanceCalculator
     {
-        private const OsuPlayMode s_mode = OsuPlayMode.Taiko;
+        private const int s_mode = 1;//taiko
 
-        public override PPTuple GetPP(ModsInfo mods)
+        public override PPTuple GetPerformance()
         {
-            return GetPPFromOppai(mods, s_mode);
+            return GetPPFromOppai(Mods, s_mode);
         }
 
-        protected override double AccuracyCalculate(int n300, int n100, int n50, int ngeki, int nkatu, int nmiss)
-        {
-            return Oppai.taiko_acc_calc(n300, n100, nmiss);
-        }
+        public override double Accuracy => Oppai.taiko_acc_calc(Count300, Count100, CountMiss) * 100;
 
-        protected override void AccuracyRound(double acc, int object_count, int nmiss, out int n300, out int n100, out int n50)
+
+        public override void AccuracyRound(double acc, int object_count, int nmiss, out int n300, out int n100, out int n50)
         {
             Oppai.taiko_acc_round(acc, object_count, CountMiss, out n300, out n100);
             n50 = 0;
