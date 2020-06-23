@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 
 namespace RealTimePPDisplayer.Displayer
 {
@@ -8,7 +9,7 @@ namespace RealTimePPDisplayer.Displayer
 	{
         private Socket sock;
         private IPEndPoint destination;
-		public SocketDisplayer(string ipAddr, int port)
+		public SocketDisplayer(int? id, string ipAddr, int port) : base(id)
 		{
             try
             {
@@ -37,16 +38,33 @@ namespace RealTimePPDisplayer.Displayer
             sock.Send(bytes);
 		}
 
-		public override void OnUpdateHitCount(HitCountTuple tuple)
-		{
-		}
-
-		public override void OnUpdatePP(PPTuple tuple)
-		{
+        private struct DataPacket
+        {
+            public float maxPP, fcPP, rtPP;
+            public int hit300, hit100, hit50, miss;
+            public int combo;
+        }
+        public override void Display()
+        {
+            base.Display();
             CheckSocket();
-            float[] data = { (float)tuple.MaxPP, (float)tuple.FullComboPP, (float)tuple.RealTimePP };
-            byte[] bytes = new byte[data.Length * 4];
-            Buffer.BlockCopy(data, 0, bytes, 0, bytes.Length);
+            DataPacket packet = new DataPacket()
+            {
+                maxPP = (float)Pp.MaxPP,
+                fcPP = (float)Pp.FullComboPP,
+                rtPP = (float)Pp.RealTimePP,
+                hit300 = HitCount.Count300,
+                hit100 = HitCount.Count100,
+                hit50 = HitCount.Count50,
+                miss = HitCount.CountMiss,
+                combo = HitCount.Combo,
+            };
+            int size = Marshal.SizeOf(packet);
+            byte[] bytes = new byte[size];
+            IntPtr ptr = Marshal.AllocHGlobal(size);
+            Marshal.StructureToPtr(packet, ptr, true);
+            Marshal.Copy(ptr, bytes, 0, size);
+            Marshal.FreeHGlobal(ptr);
             sock.Send(bytes);
 		}
 	}

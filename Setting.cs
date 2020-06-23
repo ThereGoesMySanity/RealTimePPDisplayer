@@ -9,6 +9,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Windows.Controls;
 using System.Windows.Media;
 
 namespace RealTimePPDisplayer
@@ -47,6 +48,20 @@ namespace RealTimePPDisplayer
 
     internal class SettingIni : IConfigurable
     {
+        [String(RequireRestart = true)]
+        public ConfigurationElement IpAddress
+        {
+            get => Setting.IpAddress;
+            set => Setting.IpAddress = value;
+        }
+        [Integer(MinValue = 10, MaxValue = 65535, RequireRestart = true)]
+        public ConfigurationElement Port
+        {
+            set => Setting.Port = int.Parse(value);
+            get => Setting.Port.ToString();
+        }
+
+
         [Path(IsDirectory = false,RequireRestart = true)]
         public ConfigurationElement TextOutputPath
         {
@@ -349,6 +364,8 @@ namespace RealTimePPDisplayer
         public static bool WindowTextShadow = true;
         public static bool DebugMode = false;
         public static int RoundDigits = 1;
+        public static string IpAddress = "";
+        public static int Port = 7272;
 
         private static string _ppFormat = "${smooth(rtpp)}pp";
         public static string PPFormat
